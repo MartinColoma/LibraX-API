@@ -1,20 +1,25 @@
-// /api/auth.ts
 import { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
 
-// --- Supabase client ---
+/**
+ * Initialize Supabase client with Service Role Key
+ */
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// --- Helper: Generate Login History ID ---
-function generateHistoryId() {
+/**
+ * Generate unique 10-digit login history ID
+ */
+function generateHistoryId(): string {
   return Math.floor(1000000000 + Math.random() * 9000000000).toString();
 }
 
-// --- CORS helper ---
+/**
+ * Basic CORS setup for Vercel Functions
+ */
 function setCors(res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Origin", "https://libra-x-website.vercel.app");
@@ -25,46 +30,60 @@ function setCors(res: VercelResponse) {
   );
 }
 
+/**
+ * Auth API Endpoint
+ * Supports:
+ *   - POST ?path=login
+ *   - POST ?path=logout
+ *   - GET ?path=check-email
+ */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(res);
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  const { path } = req.query; // ?path=login | ?path=logout | ?path=check-email
+  const { path } = req.query;
 
   try {
-    // --- LOGIN ---
+    /**
+     * ---------------------------
+     * LOGIN
+     * ---------------------------
+     */
     if (req.method === "POST" && path === "login") {
       const { email, password } = req.body;
+
       if (!email || !password)
         return res.status(400).json({ error: "Email and password are required" });
 
-      // Find user by email
-      const { data: users, error } = await supabase
+      // --- Find user by email ---
+      const { data: users, error: findErr } = await supabase
         .from("users")
         .select("*")
         .eq("email", email)
         .limit(1);
 
-      if (error) throw error;
+      if (findErr) throw findErr;
       if (!users || users.length === 0)
         return res.status(401).json({ error: "Invalid email or password" });
 
       const user = users[0];
 
-      // Compare password hash
+      // --- Validate password hash ---
       const isMatch = await bcrypt.compare(password, user.password_hash);
       if (!isMatch)
         return res.status(401).json({ error: "Invalid email or password" });
 
-      // Update last login
+      // --- Update last login timestamp ---
       await supabase
         .from("users")
         .update({ last_login: new Date().toISOString() })
         .eq("user_id", user.user_id);
 
-      // Log history
+      // --- Insert login history ---
       const historyId = generateHistoryId();
-      const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+      const ip = Array.isArray(req.headers["x-forwarded-for"])
+        ? req.headers["x-forwarded-for"][0]
+        : req.headers["x-forwarded-for"] || req.socket.remoteAddress || "Unknown";
       const userAgent = req.headers["user-agent"] || "Unknown";
 
       await supabase.from("login_history").insert([
@@ -77,9 +96,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
       ]);
 
-      // Remove sensitive fields
+      // --- Clean user object before sending back ---
       delete user.password_hash;
-      user.full_name = `${user.first_name} ${user.last_name}`.trim();
+      user.full_name = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim();
 
       return res.status(200).json({
         message: "✅ Login successful",
@@ -88,34 +107,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // --- LOGOUT ---
+    /**
+     * ---------------------------
+     * LOGOUT
+     * ---------------------------
+     */
     if (req.method === "POST" && path === "logout") {
+      // (Optional: could log logout event or clear session)
       return res.status(200).json({ message: "✅ Logged out successfully" });
     }
 
-    // --- CHECK EMAIL ---
+    /**
+     * ---------------------------
+     * CHECK EMAIL EXISTENCE
+     * ---------------------------
+     */
     if (req.method === "GET" && path === "check-email") {
-      const { email } = req.query;
+      const email = req.query.email as string;
       if (!email)
         return res.status(400).json({ error: "Email query parameter required" });
 
-      const { data, error } = await supabase
+      const { data, error: checkErr } = await supabase
         .from("users")
         .select("email")
         .eq("email", email)
         .limit(1);
 
-      if (error) throw error;
-      return res.json({ exists: data.length > 0 });
+      if (checkErr) throw checkErr;
+      return res.status(200).json({ exists: data.length > 0 });
     }
 
-    // --- Fallback for unsupported methods ---
+    /**
+     * ---------------------------
+     * Fallback
+     * ---------------------------
+     */
     return res.status(405).json({ message: "Method or path not allowed" });
   } catch (err: any) {
     console.error("❌ Auth API error:", err);
     return res.status(500).json({
       message: "❌ Auth API failed",
-      error: err.message || err,
+      error: err.message || String(err),
     });
   }
 }
