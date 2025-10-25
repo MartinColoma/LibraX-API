@@ -27,10 +27,10 @@ function generateUserId(role: string) {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // --- CORS headers ---
-  const allowedOrigin = `https://${process.env.FRONTEND_URL}`; // ✅ dynamic from .env
+  //const allowedOrigin = `https://${process.env.FRONTEND_URL}`; // ✅ dynamic from .env
 
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  res.setHeader("Access-Control-Allow-Origin", "libra-x-website.vercel.app");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
   res.setHeader(
     "Access-Control-Allow-Headers",
