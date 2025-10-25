@@ -1,0 +1,19 @@
+{
+  "name": "librax-api",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.76.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "@vercel/node": "^5.5.0"
+  }
+}
