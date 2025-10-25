@@ -27,7 +27,6 @@ function generateUserId(role: string) {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // --- CORS headers ---
-  //const allowedOrigin = `https://${process.env.FRONTEND_URL}`; // ✅ dynamic from .env
 
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Origin", "https://libra-x-website.vercel.app");
