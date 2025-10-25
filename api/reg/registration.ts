@@ -10,6 +10,7 @@ const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
 // --- Helper: Generate User ID ---
 function generateUserId(role: string) {
   const prefixMap: Record<string, string> = {
@@ -24,12 +25,23 @@ function generateUserId(role: string) {
   return `${prefix}${year}${randomDigits}`;
 }
 
+// --- Helper: Determine user_type from role ---
+function getUserType(role: string) {
+  const staffRoles = ["Librarian", "Admin"];
+  return staffRoles.includes(role) ? "staff" : "member";
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // --- CORS headers ---
-
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Origin", "https://libra-x-website.vercel.app");
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
+  res.setHeader(
+    "Access-Control-Allow-Origin",
+    "https://libra-x-website.vercel.app"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET,OPTIONS,PATCH,DELETE,POST,PUT"
+  );
   res.setHeader(
     "Access-Control-Allow-Headers",
     "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization"
@@ -66,6 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userId = generateUserId(role);
     const tempPassword = crypto.randomBytes(4).toString("hex");
     const passwordHash = await bcrypt.hash(tempPassword, 10);
+    const userType = getUserType(role);
 
     // --- Insert to Supabase ---
     const { data, error } = await supabase
@@ -73,7 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .insert([
         {
           user_id: userId,
-          user_type: "member",
+          user_type: userType,
           role,
           first_name: firstName,
           last_name: lastName,
