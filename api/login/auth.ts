@@ -18,16 +18,38 @@ function generateHistoryId(): string {
 }
 
 /**
- * Basic CORS setup for Vercel Functions
+ * Robust CORS handler for Vercel Functions
+ * Supports preflight requests and multiple origins
  */
-function setCors(res: VercelResponse) {
+function handleCors(req: VercelRequest, res: VercelResponse): boolean {
+  const allowedOrigins = [
+    "http://localhost:5173", // for local dev (Vite default)
+    "https://libra-x-website.vercel.app", // production frontend
+  ];
+
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Origin", "https://libra-x-website.vercel.app");
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET,OPTIONS,PATCH,DELETE,POST,PUT"
+  );
   res.setHeader(
     "Access-Control-Allow-Headers",
     "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization"
   );
+
+  // Handle preflight
+  if (req.method === "OPTIONS") {
+    res.writeHead(200, { "Content-Length": "0" });
+    res.end();
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -38,8 +60,8 @@ function setCors(res: VercelResponse) {
  *   - GET ?path=check-email
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  setCors(res);
-  if (req.method === "OPTIONS") return res.status(200).end();
+  // Always handle CORS first
+  if (handleCors(req, res)) return;
 
   const { path } = req.query;
 
@@ -52,10 +74,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "POST" && path === "login") {
       const { email, password } = req.body;
 
-      if (!email || !password)
-        return res.status(400).json({ error: "Email and password are required" });
+      if (!email || !password) {
+        return res
+          .status(400)
+          .json({ error: "Email and password are required" });
+      }
 
-      // --- Find user by email ---
+      // Find user by email
       const { data: users, error: findErr } = await supabase
         .from("users")
         .select("*")
@@ -63,23 +88,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .limit(1);
 
       if (findErr) throw findErr;
-      if (!users || users.length === 0)
+      if (!users || users.length === 0) {
         return res.status(401).json({ error: "Invalid email or password" });
+      }
 
       const user = users[0];
 
-      // --- Validate password hash ---
+      // Validate password hash
       const isMatch = await bcrypt.compare(password, user.password_hash);
-      if (!isMatch)
+      if (!isMatch) {
         return res.status(401).json({ error: "Invalid email or password" });
+      }
 
-      // --- Update last login timestamp ---
+      // Update last login timestamp
       await supabase
         .from("users")
         .update({ last_login: new Date().toISOString() })
         .eq("user_id", user.user_id);
 
-      // --- Insert login history ---
+      // Insert login history
       const historyId = generateHistoryId();
       const ip = Array.isArray(req.headers["x-forwarded-for"])
         ? req.headers["x-forwarded-for"][0]
@@ -96,7 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
       ]);
 
-      // --- Clean user object before sending back ---
+      // Clean user object before sending back
       delete user.password_hash;
       user.full_name = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim();
 
@@ -113,7 +140,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      * ---------------------------
      */
     if (req.method === "POST" && path === "logout") {
-      // (Optional: could log logout event or clear session)
       return res.status(200).json({ message: "✅ Logged out successfully" });
     }
 
